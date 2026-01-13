@@ -1,0 +1,1032 @@
+<html lang="zh-CN"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>速写倒计时工具</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 统一的 Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1a365d',      // 深蓝色
+                        secondary: '#2d3748',    // 深灰色
+                        accent: '#f56565',       // 红色强调
+                        success: '#48bb78',      // 绿色成功
+                        neutral: '#e2e8f0',      // 中性色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['Roboto Mono', 'monospace'],
+                    },
+                    animation: {
+                        'pulse-warning': 'pulse 1s infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .glass-effect {
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+            .btn-hover {
+                @apply transform transition-transform duration-150 hover:scale-105 active:scale-95;
+            }
+            .time-input {
+                @apply w-16 px-2 py-1 text-center text-xl font-mono bg-gray-800 border border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-blue-500;
+            }
+            .volume-slider {
+                @apply w-32 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer;
+            }
+            .volume-slider::-webkit-slider-thumb {
+                @apply appearance-none w-4 h-4 bg-blue-500 rounded-full cursor-pointer -mt-1;
+            }
+            .form-checkbox:checked {
+                background-color: #3b82f6;
+                border-color: #3b82f6;
+            }
+        }
+    </style>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a365d 0%, #2d3748 100%);
+            min-height: 100vh;
+        }
+        
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .warning {
+            color: #f56565;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+        
+        .success-flash {
+            animation: success-flash 0.5s ease-in-out;
+        }
+        
+        @keyframes success-flash {
+            0% { background-color: transparent; }
+            50% { background-color: rgba(72, 187, 120, 0.3); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 text-white">
+    <div class="w-full max-w-md mx-auto bg-gray-800 rounded-xl p-8 shadow-lg relative">
+        <!-- 配色按钮 -->
+        <button id="theme-btn" class="absolute top-4 right-4 w-8 h-8 bg-gray-700 rounded-md flex items-center justify-center hover:bg-gray-600 transition-colors">
+            <i class="fa fa-paint-brush"></i>
+        </button>
+        
+        <!-- 标题 -->
+        <h1 class="text-3xl font-bold text-center mb-8 text-white/80">倒计时</h1>
+        
+        <!-- 倒计时显示 -->
+        <div id="timer-display" class="timer-display text-6xl md:text-7xl font-mono font-bold text-center mb-8">REST:03</div>
+        
+        <!-- 时间设置区域 -->
+        <div class="mb-8">
+            <div class="flex items-center justify-center mb-4">
+                <label for="preset-times" class="mr-2 text-sm text-white/70">快速选择:</label>
+                <select id="preset-times" class="bg-gray-800 text-white border border-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">选择预设时间</option>
+                    <option value="30">30秒</option>
+                    <option value="60">1分钟</option>
+                    <option value="180">3分钟</option>
+                    <option value="300">5分钟</option>
+                    <option value="600">10分钟</option>
+                    <option value="1800">30分钟</option>
+                    <option value="3600">1小时</option>
+                    <option value="7200">2小时</option>
+                    <option value="10800">3小时</option>
+                </select>
+            </div>
+            
+            <div class="flex items-center justify-center">
+                <span class="mr-2 text-sm text-white/70">自定义:</span>
+                <input type="number" id="hours" class="time-input" min="0" max="999" placeholder="时">
+                <span class="mx-1 text-sm text-white/70">:</span>
+                <input type="number" id="minutes" class="time-input" min="0" max="59" placeholder="分">
+                <span class="mx-1 text-sm text-white/70">:</span>
+                <input type="number" id="seconds" class="time-input" min="0" max="59" placeholder="秒">
+            </div>
+            <p id="time-error" class="text-accent text-xs text-center mt-1 hidden">请输入有效的时间（最大24小时）</p>
+        </div>
+        
+        <!-- 进度条 -->
+        <div class="w-full rounded-full h-2.5 mb-6 overflow-hidden" style="background-color: rgba(255, 255, 255, 0.15);">
+            <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        
+        <!-- 控制按钮区域 -->
+        <div class="flex justify-center space-x-4 mb-4">
+            <button id="start-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow btn-hover flex items-center">
+                <i class="fa fa-play mr-2"></i> 开始
+            </button>
+            <button id="pause-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-lg shadow btn-hover flex items-center hidden">
+                <i class="fa fa-pause mr-2"></i> 暂停
+            </button>
+            <button id="reset-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg shadow btn-hover flex items-center">
+                <i class="fa fa-refresh mr-2"></i> 重置
+            </button>
+        </div>
+        
+        <!-- 更多按钮 -->
+        <div class="text-center mb-4">
+            <button id="more-btn" class="text-sm text-gray-300 hover:text-white flex items-center mx-auto">
+                <span>更多选项</span>
+                <i class="fa fa-chevron-down ml-1 transition-transform duration-300" id="more-icon"></i>
+            </button>
+        </div>
+        
+        <!-- 高级设置区域 -->
+        <div id="advanced-settings" class="mb-6 p-4 bg-gray-800 bg-opacity-50 rounded-lg hidden">
+            <h3 class="text-lg font-semibold mb-3 text-left">高级设置</h3>
+            
+            <!-- 记次功能 -->
+            <div class="flex items-center justify-between mb-3">
+                <label class="flex items-center cursor-pointer">
+                    <input type="checkbox" id="record-sessions" class="form-checkbox h-5 w-5 text-blue-500 rounded focus:ring-blue-500">
+                    <span class="ml-2">记录练习次数</span>
+                </label>
+                
+                <!-- 连续功能 -->
+                <label class="flex items-center cursor-pointer">
+                    <input type="checkbox" id="continuous-mode" class="form-checkbox h-5 w-5 text-blue-500 rounded focus:ring-blue-500">
+                    <span class="ml-2">连续模式</span>
+                </label>
+            </div>
+            
+            <!-- 提示音设置 -->
+            <div class="mb-3">
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="sound-enabled" class="form-checkbox h-5 w-5 text-blue-500 rounded focus:ring-blue-500" checked>
+                        <span class="ml-2">启用提示音</span>
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="50">
+                        <span id="volume-value" class="text-sm text-gray-400 w-8 text-center">50%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 间隔时间设置 -->
+            <div class="flex items-center justify-between">
+                <label for="interval-time" class="text-sm">间隔时间:</label>
+                <div class="flex items-center space-x-2">
+                    <select id="interval-preset" class="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">预设</option>
+                        <option value="0">无</option>
+                        <option value="5">5秒</option>
+                        <option value="10">10秒</option>
+                        <option value="30">30秒</option>
+                        <option value="60">1分钟</option>
+                    </select>
+                    <input type="number" id="interval-time" class="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-blue-500" min="0" max="300" placeholder="自定义" value="0">
+                    <span class="text-sm text-gray-400">秒</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 练习记录区域 -->
+        <div id="session-records" class="mt-8 hidden">
+            <h3 class="text-lg font-semibold mb-3 text-left">练习记录</h3>
+            <div class="max-h-40 overflow-y-auto bg-gray-800 bg-opacity-50 rounded-lg p-3">
+                <ul id="records-list" class="text-sm">
+                    <!-- 记录将在这里动态添加 -->
+                </ul>
+            </div>
+            <div class="flex justify-between mt-2">
+                <div class="flex items-center">
+                    <span id="session-count" class="text-sm text-gray-300 mr-3">总次数: 0</span>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="aggregate-records" class="form-checkbox h-4 w-4 text-blue-500 rounded focus:ring-blue-500">
+                        <span class="ml-1 text-xs">合计模式</span>
+                    </label>
+                </div>
+                <button id="clear-records" class="text-xs text-gray-400 hover:text-white">清除记录</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 配色面板 -->
+    <div id="theme-panel" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-gray-800 rounded-xl p-6 shadow-2xl max-w-md w-full mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">配色方案</h3>
+                <button id="close-theme-panel" class="text-gray-400 hover:text-white">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- 预设配色方案 -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold mb-2 text-gray-300">预设方案</h4>
+                <div class="grid grid-cols-4 gap-2">
+                    <button class="theme-preset w-12 h-12 rounded-md bg-gradient-to-br from-blue-800 to-gray-800 border-2 border-blue-500 flex items-center justify-center text-white" data-theme="default">
+                        <i class="fa fa-home"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-white border-2 border-black flex items-center justify-center text-black" data-theme="light">
+                        <i class="fa fa-sun-o"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-black border-2 border-white flex items-center justify-center text-white" data-theme="dark">
+                        <i class="fa fa-moon-o"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-gradient-to-br from-gray-900 to-blue-900 border-2 border-blue-500 flex items-center justify-center text-blue-300" data-theme="black-blue">
+                        <i class="fa fa-building"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-gradient-to-br from-gray-900 to-yellow-900 border-2 border-yellow-500 flex items-center justify-center text-yellow-300" data-theme="black-yellow">
+                        <i class="fa fa-fire"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-gradient-to-br from-blue-800 to-yellow-600 border-2 border-yellow-400 flex items-center justify-center text-white" data-theme="blue-yellow">
+                        <i class="fa fa-sun-o"></i>
+                    </button>
+                    <button class="theme-preset w-12 h-12 rounded-md bg-gradient-to-br from-purple-700 to-pink-500 border-2 border-yellow-500 flex items-center justify-center text-yellow-400" data-theme="purple">
+                        <i class="fa fa-magic"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 自定义配色 -->
+            <div>
+                <h4 class="text-sm font-semibold mb-2 text-gray-300">自定义配色</h4>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label for="text-color" class="text-sm">字体颜色:</label>
+                        <input type="color" id="text-color" class="w-8 h-8 rounded cursor-pointer" value="#ffffff">
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <label for="panel-color" class="text-sm">面板颜色:</label>
+                        <input type="color" id="panel-color" class="w-8 h-8 rounded cursor-pointer" value="#1f2937">
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <label for="button-color" class="text-sm">按钮颜色:</label>
+                        <input type="color" id="button-color" class="w-8 h-8 rounded cursor-pointer" value="#3b82f6">
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <label for="bg-color" class="text-sm">背景颜色:</label>
+                        <input type="color" id="bg-color" class="w-8 h-8 rounded cursor-pointer" value="#1a365d">
+                    </div>
+                </div>
+                <button id="apply-custom-theme" class="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-md transition-colors">
+                    应用自定义配色
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 页脚 -->
+    <footer class="mt-8 text-sm text-gray-400">
+        <p>倒计时工具</p>
+    </footer>
+
+    <script>
+        // DOM 元素
+        const timerDisplay = document.getElementById('timer-display');
+        const startBtn = document.getElementById('start-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const presetTimes = document.getElementById('preset-times');
+        const hoursInput = document.getElementById('hours');
+        const minutesInput = document.getElementById('minutes');
+        const secondsInput = document.getElementById('seconds');
+        const timeError = document.getElementById('time-error');
+        
+        // 新功能 DOM 元素
+        const recordSessionsCheckbox = document.getElementById('record-sessions');
+        const continuousModeCheckbox = document.getElementById('continuous-mode');
+        const intervalTimeSelect = document.getElementById('interval-time');
+        const intervalPresetSelect = document.getElementById('interval-preset');
+        const sessionRecordsDiv = document.getElementById('session-records');
+        const recordsList = document.getElementById('records-list');
+        const sessionCountSpan = document.getElementById('session-count');
+        const clearRecordsBtn = document.getElementById('clear-records');
+        const aggregateRecordsCheckbox = document.getElementById('aggregate-records');
+        const progressBar = document.getElementById('progress-bar');
+        
+        // 提示音相关 DOM 元素
+        const soundEnabledCheckbox = document.getElementById('sound-enabled');
+        const volumeSlider = document.getElementById('volume-slider');
+        const volumeValueSpan = document.getElementById('volume-value');
+        
+        // 时间设置区域元素
+        const timeSettingsDiv = document.querySelector('.mb-8');
+        
+        // 主题相关 DOM 元素
+        const themeBtn = document.getElementById('theme-btn');
+        const themePanel = document.getElementById('theme-panel');
+        const closeThemePanel = document.getElementById('close-theme-panel');
+        const themePresets = document.querySelectorAll('.theme-preset');
+        const textColorInput = document.getElementById('text-color');
+        const panelColorInput = document.getElementById('panel-color');
+        const buttonColorInput = document.getElementById('button-color');
+        const bgColorInput = document.getElementById('bg-color');
+        const applyCustomTheme = document.getElementById('apply-custom-theme');
+        
+        // 更多选项相关 DOM 元素
+        const moreBtn = document.getElementById('more-btn');
+        const moreIcon = document.getElementById('more-icon');
+        const advancedSettings = document.getElementById('advanced-settings');
+        
+        // 主面板元素
+        const mainPanel = document.querySelector('.w-full.max-w-md');
+        
+        // 保存当前背景色
+        let currentBgColor = 'linear-gradient(135deg, #1a365d 0%, #2d3748 100%)';
+        
+        // 计时器变量
+        let timer;
+        let totalSeconds = 0;
+        let remainingSeconds = 0;
+        let isRunning = false;
+        let isInterval = false;
+        let sessionCount = 0;
+        let sessionRecords = [];
+        
+        // 初始化
+        function init() {
+            // 设置默认时间为5分钟
+            setTimeFromInputs(0, 5, 0);
+            
+            // 默认勾选合计模式
+            aggregateRecordsCheckbox.checked = true;
+            
+            // 事件监听器
+            startBtn.addEventListener('click', startTimer);
+            pauseBtn.addEventListener('click', pauseTimer);
+            resetBtn.addEventListener('click', resetTimer);
+            presetTimes.addEventListener('change', handlePresetChange);
+            
+            // 输入验证
+            hoursInput.addEventListener('input', validateInputs);
+            minutesInput.addEventListener('input', validateInputs);
+            secondsInput.addEventListener('input', validateInputs);
+            
+            // 新功能事件监听器
+            recordSessionsCheckbox.addEventListener('change', toggleRecordSessions);
+            continuousModeCheckbox.addEventListener('change', toggleContinuousMode);
+            intervalPresetSelect.addEventListener('change', handleIntervalPresetChange);
+            clearRecordsBtn.addEventListener('click', clearRecords);
+            aggregateRecordsCheckbox.addEventListener('change', updateRecordsUI);
+            
+            // 提示音相关事件监听器
+            volumeSlider.addEventListener('input', handleVolumeChange);
+            
+            // 主题相关事件监听器
+            themeBtn.addEventListener('click', toggleThemePanel);
+            closeThemePanel.addEventListener('click', toggleThemePanel);
+            themePresets.forEach(preset => {
+                preset.addEventListener('click', () => applyPresetTheme(preset.dataset.theme));
+            });
+            applyCustomTheme.addEventListener('click', applyCustomThemeSettings);
+            
+            // 更多选项事件监听器
+            moreBtn.addEventListener('click', toggleMoreOptions);
+            
+            // 键盘快捷键
+            document.addEventListener('keydown', handleKeyPress);
+        }
+        
+        // 处理预设时间选择
+        function handlePresetChange() {
+            const selectedValue = presetTimes.value;
+            if (selectedValue) {
+                const seconds = parseInt(selectedValue);
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                
+                setTimeFromInputs(hours, minutes, secs);
+                
+                // 不重置选择框，保持显示选中的预设时间
+                // 这样用户可以看到当前选择的预设
+            }
+        }
+        
+        // 从输入框设置时间
+        function setTimeFromInputs(hours, minutes, seconds) {
+            hoursInput.value = hours || '';
+            minutesInput.value = minutes || '';
+            secondsInput.value = seconds || '';
+            
+            totalSeconds = hours * 3600 + minutes * 60 + seconds;
+            remainingSeconds = totalSeconds;
+            updateTimerDisplay();
+            updateProgressBar();
+        }
+        
+        // 验证输入
+        function validateInputs() {
+            const hours = parseInt(hoursInput.value) || 0;
+            const minutes = parseInt(minutesInput.value) || 0;
+            const seconds = parseInt(secondsInput.value) || 0;
+            
+            // 检查是否超过24小时
+            if (hours > 23 || (hours === 23 && (minutes > 59 || seconds > 59))) {
+                timeError.classList.remove('hidden');
+                return false;
+            } else {
+                timeError.classList.add('hidden');
+                totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                remainingSeconds = totalSeconds;
+                updateTimerDisplay();
+                return true;
+            }
+        }
+        
+        // 开始计时器
+        function startTimer() {
+            if (totalSeconds === 0) {
+                if (!validateInputs()) {
+                    timeError.classList.remove('hidden');
+                    return;
+                }
+                timeError.classList.add('hidden');
+            }
+            
+            if (!isRunning) {
+                isRunning = true;
+                startBtn.classList.add('hidden');
+                pauseBtn.classList.remove('hidden');
+                
+                // 使用当前保存的背景色，不重置为默认色
+                document.body.style.background = currentBgColor;
+                
+                timer = setInterval(() => {
+                    if (remainingSeconds > 0) {
+                        remainingSeconds--;
+                        updateTimerDisplay();
+                        updateProgressBar();
+                        
+                        // 最后10秒添加警告效果
+                        if (remainingSeconds <= 10) {
+                            timerDisplay.classList.add('warning');
+                        }
+                        
+                        // 最后5秒背景直接变红
+                        if (remainingSeconds <= 5) {
+                            document.body.style.background = 'linear-gradient(135deg, #f56565 0%, #c53030 100%)';
+                        }
+                    } else {
+                        timerComplete();
+                    }
+                }, 1000);
+            }
+        }
+        
+        // 暂停计时器
+        function pauseTimer() {
+            if (isRunning || isInterval) {
+                clearInterval(timer);
+                isRunning = false;
+                pauseBtn.classList.add('hidden');
+                startBtn.classList.remove('hidden');
+                startBtn.innerHTML = '<i class="fa fa-play mr-2"></i> 继续';
+            }
+        }
+        
+        // 重置计时器
+        function resetTimer() {
+            clearInterval(timer);
+            isRunning = false;
+            pauseBtn.classList.add('hidden');
+            startBtn.classList.remove('hidden');
+            startBtn.innerHTML = '<i class="fa fa-play mr-2"></i> 开始';
+            timerDisplay.classList.remove('warning');
+            
+            // 重置为当前输入的时间
+            const hours = parseInt(hoursInput.value) || 0;
+            const minutes = parseInt(minutesInput.value) || 0;
+            const seconds = parseInt(secondsInput.value) || 0;
+            
+            remainingSeconds = hours * 3600 + minutes * 60 + seconds;
+            updateTimerDisplay();
+        }
+        
+        // 计时器完成
+        function timerComplete() {
+            clearInterval(timer);
+            isRunning = false;
+            pauseBtn.classList.add('hidden');
+            startBtn.classList.remove('hidden');
+            startBtn.innerHTML = '<i class="fa fa-play mr-2"></i> 开始';
+            timerDisplay.classList.remove('warning');
+            
+            // 添加完成动画
+            document.body.classList.add('success-flash');
+            setTimeout(() => {
+                document.body.classList.remove('success-flash');
+            }, 500);
+            
+            // 播放完成提示音
+            playCompletionSound();
+            
+            // 记录练习次数（如果启用）
+            if (recordSessionsCheckbox.checked) {
+                addSessionRecord();
+            }
+            
+            // 重置计时器
+            remainingSeconds = totalSeconds;
+            updateTimerDisplay();
+            
+            // 处理连续模式（现在独立于记次功能）
+            if (continuousModeCheckbox.checked) {
+                const intervalSeconds = parseInt(intervalTimeSelect.value) || 0;
+                if (intervalSeconds > 0) {
+                    startInterval(intervalSeconds);
+                } else {
+                    // 无间隔，直接开始下一轮
+                    startTimer();
+                }
+            }
+        }
+        
+        // 播放完成提示音
+        function playCompletionSound() {
+            if (!soundEnabledCheckbox.checked) {
+                return;
+            }
+            
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.type = 'sine';
+                
+                // 根据音量滑块设置音量
+                const volume = (volumeSlider.value / 100) * 0.2;
+                gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 1);
+            } catch (e) {
+                console.log('无法播放提示音:', e);
+            }
+        }
+        
+        // 更新计时器显示
+        function updateTimerDisplay() {
+            const hours = Math.floor(remainingSeconds / 3600);
+            const minutes = Math.floor((remainingSeconds % 3600) / 60);
+            const seconds = remainingSeconds % 60;
+            
+            timerDisplay.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+        
+        // 数字补零
+        function pad(num) {
+            return num.toString().padStart(2, '0');
+        }
+        
+        // 处理音量变化
+        function handleVolumeChange() {
+            volumeValueSpan.textContent = volumeSlider.value + '%';
+        }
+
+        // 键盘快捷键处理
+        function handleKeyPress(e) {
+            // 空格键控制开始/暂停
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (isRunning) {
+                    pauseTimer();
+                } else {
+                    startTimer();
+                }
+            }
+            
+            // R键重置
+            if (e.code === 'KeyR' && e.ctrlKey) {
+                e.preventDefault();
+                resetTimer();
+            }
+        }
+        
+        // 初始化应用
+        window.addEventListener('DOMContentLoaded', init);
+        
+        // 新功能实现函数
+        
+        // 切换记次功能
+        function toggleRecordSessions() {
+            // 只有在更多选项展开时才显示/隐藏记录区域
+            const isMoreVisible = !advancedSettings.classList.contains('hidden');
+            if (recordSessionsCheckbox.checked && isMoreVisible) {
+                sessionRecordsDiv.classList.remove('hidden');
+            } else {
+                sessionRecordsDiv.classList.add('hidden');
+            }
+        }
+        
+        // 切换连续模式
+        function toggleContinuousMode() {
+            // 连续模式和记次功能现在完全独立
+        }
+        
+        // 处理间隔时间预设选择
+        function handleIntervalPresetChange() {
+            const selectedValue = intervalPresetSelect.value;
+            if (selectedValue) {
+                // 将预设值设置到自定义输入框
+                intervalTimeSelect.value = selectedValue;
+            }
+        }
+        
+        // 清除记录
+        function clearRecords() {
+            sessionRecords = [];
+            sessionCount = 0;
+            recordsList.innerHTML = '';
+            sessionCountSpan.textContent = `总次数: ${sessionCount}`;
+        }
+        
+        // 添加练习记录
+        function addSessionRecord() {
+            sessionCount++;
+            
+            // 格式化时间
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+            const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            
+            // 格式化时长
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            let durationStr = '';
+            if (hours > 0) durationStr += `${hours}小时`;
+            if (minutes > 0 || hours > 0) durationStr += `${minutes}分钟`;
+            if (seconds > 0 || durationStr === '') durationStr += `${seconds}秒`;
+            
+            // 创建记录对象
+            const record = {
+                id: sessionCount,
+                date: dateStr,
+                time: timeStr,
+                duration: durationStr
+            };
+            
+            sessionRecords.push(record);
+            
+            // 更新UI
+            updateRecordsUI();
+        }
+        
+        // 更新记录UI
+        function updateRecordsUI() {
+            recordsList.innerHTML = '';
+            
+            if (aggregateRecordsCheckbox.checked) {
+                // 合计模式：按时间分组
+                const aggregated = {};
+                
+                sessionRecords.forEach(record => {
+                    if (!aggregated[record.duration]) {
+                        aggregated[record.duration] = 0;
+                    }
+                    aggregated[record.duration]++;
+                });
+                
+                // 显示合计记录
+                Object.keys(aggregated).forEach(duration => {
+                    const count = aggregated[duration];
+                    const li = document.createElement('li');
+                    li.className = 'py-1 border-b border-gray-700 last:border-b-0 flex items-center justify-between';
+                    li.innerHTML = `
+                        <span class="text-white">${duration}</span>
+                        <div class="flex items-center">
+                            <span class="text-gray-400 mr-3">${count}次</span>
+                            <button class="delete-aggregate text-gray-500 hover:text-red-500 text-xs" data-duration="${duration}">
+                                <i class="fa fa-trash-o"></i>
+                            </button>
+                        </div>
+                    `;
+                    recordsList.appendChild(li);
+                });
+                
+                // 添加删除合计记录的事件监听器
+                document.querySelectorAll('.delete-aggregate').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const duration = this.dataset.duration;
+                        deleteAggregateRecords(duration);
+                    });
+                });
+            } else {
+                // 普通模式：显示每条记录
+                for (let i = sessionRecords.length - 1; i >= 0; i--) {
+                    const record = sessionRecords[i];
+                    const li = document.createElement('li');
+                    li.className = 'py-1 border-b border-gray-700 last:border-b-0 flex items-center justify-between';
+                    li.innerHTML = `
+                        <span class="text-gray-400">${record.date} ${record.time}</span>
+                        <span class="text-white">${record.duration}</span>
+                        <div class="flex items-center">
+                            <span class="text-gray-500 mr-3">#${record.id}</span>
+                            <button class="delete-record text-gray-500 hover:text-red-500 text-xs" data-id="${record.id}">
+                                <i class="fa fa-trash-o"></i>
+                            </button>
+                        </div>
+                    `;
+                    recordsList.appendChild(li);
+                }
+                
+                // 添加删除单条记录的事件监听器
+                document.querySelectorAll('.delete-record').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const id = parseInt(this.dataset.id);
+                        deleteRecord(id);
+                    });
+                });
+            }
+            
+            sessionCountSpan.textContent = `总次数: ${sessionCount}`;
+        }
+        
+        // 删除单条记录
+        function deleteRecord(id) {
+            const index = sessionRecords.findIndex(record => record.id === id);
+            if (index !== -1) {
+                sessionRecords.splice(index, 1);
+                sessionCount--;
+                updateRecordsUI();
+            }
+        }
+        
+        // 删除合计记录
+        function deleteAggregateRecords(duration) {
+            sessionRecords = sessionRecords.filter(record => record.duration !== duration);
+            sessionCount = sessionRecords.length;
+            updateRecordsUI();
+        }
+        
+        // 开始间隔时间
+        function startInterval(intervalSeconds) {
+            isInterval = true;
+            remainingSeconds = intervalSeconds;
+            
+            // 更新显示为间隔时间
+            timerDisplay.textContent = `REST: ${pad(remainingSeconds)}`;
+            timerDisplay.classList.add('text-yellow-400');
+            
+            // 显示暂停按钮，隐藏开始按钮
+            startBtn.classList.add('hidden');
+            pauseBtn.classList.remove('hidden');
+            pauseBtn.innerHTML = '<i class="fa fa-pause mr-2"></i> 暂停';
+            
+            // 开始间隔计时器
+            timer = setInterval(() => {
+                if (remainingSeconds > 0) {
+                    remainingSeconds--;
+                    timerDisplay.textContent = `REST: ${pad(remainingSeconds)}`;
+                } else {
+                    endInterval();
+                }
+            }, 1000);
+        }
+        
+        // 结束间隔时间
+        function endInterval() {
+            clearInterval(timer);
+            isInterval = false;
+            
+            // 恢复显示
+            timerDisplay.classList.remove('text-yellow-400');
+            remainingSeconds = totalSeconds;
+            updateTimerDisplay();
+            updateProgressBar();
+            
+            // 开始下一轮计时
+            startTimer();
+        }
+        
+        // 更新进度条（改为正增长）
+        function updateProgressBar() {
+            if (totalSeconds > 0) {
+                const percentage = ((totalSeconds - remainingSeconds) / totalSeconds) * 100;
+                progressBar.style.width = `${percentage}%`;
+                
+                // 最后5秒进度条直接变红（对所有配色方案通用）
+                if (remainingSeconds <= 5) {
+                    progressBar.classList.remove('bg-blue-600', 'bg-yellow-600');
+                    progressBar.classList.add('bg-red-600');
+                    // 强制设置为红色，不受主题影响
+                    progressBar.style.backgroundColor = '#f56565';
+                }
+                // 根据已用时间改变进度条颜色
+                else if (percentage < 40) {
+                    progressBar.classList.remove('bg-yellow-600', 'bg-red-600');
+                    progressBar.classList.add('bg-blue-600');
+                    // 重置为主题颜色
+                    progressBar.style.backgroundColor = '';
+                } else if (percentage < 80) {
+                    progressBar.classList.remove('bg-blue-600', 'bg-red-600');
+                    progressBar.classList.add('bg-yellow-600');
+                    // 重置为主题颜色
+                    progressBar.style.backgroundColor = '';
+                } else {
+                    progressBar.classList.remove('bg-blue-600', 'bg-yellow-600');
+                    progressBar.classList.add('bg-red-600');
+                    // 重置为主题颜色
+                    progressBar.style.backgroundColor = '';
+                }
+            } else {
+                progressBar.style.width = '0%';
+            }
+        }
+        
+        // 主题相关函数
+        
+        // 切换主题面板
+        function toggleThemePanel() {
+            themePanel.classList.toggle('hidden');
+        }
+        
+        // 应用预设主题
+        function applyPresetTheme(theme) {
+            const themes = {
+                'default': {
+                    textColor: '#ffffff',
+                    panelColor: '#1f2937',
+                    buttonColor: '#3b82f6',
+                    bgColor: '#1a365d',
+                    bgGradient: 'linear-gradient(135deg, #1a365d 0%, #2d3748 100%)'
+                },
+                'light': {
+                    textColor: '#000000',
+                    panelColor: '#ffffff',
+                    buttonColor: '#3b82f6',
+                    bgColor: '#f3f4f6',
+                    bgGradient: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)'
+                },
+                'dark': {
+                    textColor: '#ffffff',
+                    panelColor: '#0f172a',
+                    buttonColor: '#6b7280',
+                    bgColor: '#111827',
+                    bgGradient: 'linear-gradient(135deg, #111827 0%, #1f2937 100%)'
+                },
+                'black-blue': {
+                    textColor: '#93c5fd',
+                    panelColor: '#0f172a',
+                    buttonColor: '#3b82f6',
+                    bgColor: '#0f172a',
+                    bgGradient: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
+                },
+                'black-yellow': {
+                    textColor: '#fcd34d',
+                    panelColor: '#0f172a',
+                    buttonColor: '#eab308',
+                    bgColor: '#0f172a',
+                    bgGradient: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
+                },
+                'blue-yellow': {
+                    textColor: '#ffad00',
+                    panelColor: '#001754',
+                    buttonColor: '#ffad00',
+                    bgColor: '#224cc5',
+                    bgGradient: 'linear-gradient(135deg, #224cc5 0%, #5f1fbc 100%)'
+                },
+                'purple': {
+                    textColor: '#eb8a1c',
+                    panelColor: '#2b006e',
+                    buttonColor: '#eb8a1c',
+                    bgColor: '#5514b7',
+                    bgGradient: 'linear-gradient(135deg, #5514b7 0%, #b053c6 100%)'
+                }
+            };
+            
+            if (themes[theme]) {
+                applyTheme(themes[theme]);
+                toggleThemePanel();
+            }
+        }
+        
+        // 应用自定义主题
+        function applyCustomThemeSettings() {
+            const theme = {
+                textColor: textColorInput.value,
+                panelColor: panelColorInput.value,
+                buttonColor: buttonColorInput.value,
+                bgColor: bgColorInput.value
+            };
+            
+            applyTheme(theme);
+            toggleThemePanel();
+        }
+        
+        // 切换更多选项
+        function toggleMoreOptions() {
+            const isVisible = !advancedSettings.classList.contains('hidden');
+            
+            if (isVisible) {
+                // 隐藏高级设置和练习记录
+                advancedSettings.classList.add('hidden');
+                sessionRecordsDiv.classList.add('hidden');
+                moreIcon.style.transform = 'rotate(0deg)';
+                moreBtn.querySelector('span').textContent = '更多选项';
+            } else {
+                // 显示高级设置
+                advancedSettings.classList.remove('hidden');
+                // 如果启用了记次功能，也显示练习记录
+                if (recordSessionsCheckbox.checked) {
+                    sessionRecordsDiv.classList.remove('hidden');
+                }
+                moreIcon.style.transform = 'rotate(180deg)';
+                moreBtn.querySelector('span').textContent = '收起选项';
+            }
+        }
+
+        // 应用主题设置
+        function applyTheme(theme) {
+            // 设置文本颜色（强制覆盖Tailwind类）
+            document.body.style.color = theme.textColor;
+            
+            // 移除所有文本相关的Tailwind类，确保继承body颜色
+            const whiteTextElements = document.querySelectorAll('.text-white, .text-white\\/80, .text-white\\/70, .text-gray-300, .text-gray-400, .text-gray-500');
+            whiteTextElements.forEach(el => {
+                el.classList.remove('text-white', 'text-white/80', 'text-white/70', 'text-gray-300', 'text-gray-400', 'text-gray-500');
+                el.style.color = 'inherit';
+            });
+            
+            // 设置面板颜色
+            mainPanel.style.backgroundColor = theme.panelColor;
+            
+            // 设置按钮颜色（排除不需要背景色的按钮）
+            const buttons = document.querySelectorAll('button:not(.theme-preset):not(#apply-custom-theme):not(#close-theme-panel):not(#more-btn):not(.delete-record):not(.delete-aggregate):not(#clear-records)');
+            buttons.forEach(btn => {
+                if (btn.id === 'start-btn' || btn.id === 'pause-btn') {
+                    btn.style.backgroundColor = theme.buttonColor;
+                    // 确保按钮文本颜色与主题匹配
+                    btn.style.color = theme.textColor === '#000000' ? '#ffffff' : '#ffffff';
+                } else if (btn.id !== 'close-theme-panel' && btn.id !== 'more-btn' && !btn.classList.contains('delete-record') && !btn.classList.contains('delete-aggregate') && btn.id !== 'clear-records') {
+                    btn.style.backgroundColor = adjustColor(theme.buttonColor, -30);
+                    // 确保按钮文本颜色与主题匹配
+                    btn.style.color = theme.textColor === '#000000' ? '#ffffff' : '#ffffff';
+                }
+            });
+            
+            // 重置不需要背景色的按钮样式
+            const noBgButtons = document.querySelectorAll('#close-theme-panel, #more-btn, .delete-record, .delete-aggregate, #clear-records');
+            noBgButtons.forEach(btn => {
+                btn.style.backgroundColor = 'transparent';
+            });
+            
+            // 设置背景颜色并保存
+            const bgGradient = theme.bgGradient || `linear-gradient(135deg, ${theme.bgColor} 0%, ${adjustColor(theme.bgColor, -20)} 100%)`;
+            document.body.style.background = bgGradient;
+            currentBgColor = bgGradient;
+            
+            // 设置输入框样式
+            const inputs = document.querySelectorAll('input[type="number"], select');
+            inputs.forEach(input => {
+                input.style.backgroundColor = adjustColor(theme.panelColor, -10);
+                input.style.color = theme.textColor;
+                input.style.borderColor = adjustColor(theme.panelColor, -20);
+            });
+            
+            // 设置进度条颜色
+            progressBar.style.backgroundColor = theme.buttonColor;
+            
+            // 设置其他元素样式
+            const recordPanels = document.querySelectorAll('.bg-gray-800, .bg-gray-700');
+            recordPanels.forEach(panel => {
+                panel.style.backgroundColor = adjustColor(theme.panelColor, -10);
+            });
+        }
+        
+        // 调整颜色亮度
+        function adjustColor(color, amount) {
+            return '#' + color.replace(/^#/, '').replace(/../g, color => 
+                ('0' + Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).slice(-2)
+            );
+        }
+    </script>
+
+</body></html>
